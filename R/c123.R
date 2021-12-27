@@ -1,4 +1,4 @@
-C1 <- 
+C1 <-
   function(data,
            t) {
     if ((t-14)<=0) {
@@ -15,7 +15,8 @@ C1 <-
     res <- (data[t]-mean)/sd;
     return (list(mean, sd, res));
   }
-C2 <- 
+
+C2 <-
   function(data,
            t) {
     if(t-18<=0) {
@@ -34,7 +35,26 @@ C2 <-
     return (list(mean, sd, res));
   }
 
-C3 <- 
+C2_1day <-
+  function(data,
+           t) {
+    if(t-16<=0) {
+      return (list("Not possible", "Not possible", "Not possible"));
+    }
+    mean <- mean(data[(t-8):(t-2)]);
+    var <- 0;
+    var <- 0;
+    for (i in (t-8):(t-2)) {
+      m <- mean(data[(i-8):(i-2)]);
+      var <- var+(data[i]-m)**2;
+    }
+    var <- var/6;
+    sd <- sqrt(var);
+    res <- (data[t]-mean)/sd;
+    return (list(mean, sd, res));
+  }
+
+C3 <-
   function(data,
            t) {
     res <- 0;
@@ -49,11 +69,30 @@ C3 <-
         c2 = as.numeric(C2(data,i)[3]);
         res <- res+ max(0,c2-1);
       }
-    }    
+    }
     return (list(mean, sd, res));
   }
 
-C <- 
+C3_1day <-
+  function(data,
+           t) {
+    res <- 0;
+    for (i in (t-2):t) {
+      if(C2_1day(data,i)[1] == "Not possible") {
+        return (list("Not possible", "Not possible", "Not possible"));
+      }
+      else
+      {
+        mean = as.numeric(C2_1day(data,i)[1]);
+        sd = as.numeric(C2_1day(data,i)[2]);
+        c2 = as.numeric(C2_1day(data,i)[3]);
+        res <- res+ max(0,c2-1);
+      }
+    }
+    return (list(mean, sd, res));
+  }
+
+C <-
   function(bound_metric,
            num_adj,
            i){
@@ -61,16 +100,27 @@ C <-
       limit <- 3
       c = C1(num_adj,i)
     }
-    
+
     if (bound_metric == 'C2') {
       limit <- 3
       c = C2(num_adj,i)
     }
     
+    if (bound_metric == 'C2_1day') {
+      limit <- 3
+      c = C2_1day(num_adj,i)
+    }
+
     if (bound_metric == 'C3') {
       limit <- 2
       c = C3(num_adj,i)
     }
+    
+    if (bound_metric == 'C3_1day') {
+      limit <- 2
+      c = C3_1day(num_adj,i)
+    }
+    
     if (c[1] == 'Not possible') {
       return (list("Not possible", "Not possible", "Not possible", "Not possible"));
     }
