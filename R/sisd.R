@@ -1,3 +1,4 @@
+#Function for adjustments
 threshold <-
   function(ub_for_adjustment,
            bound_metric,
@@ -46,16 +47,12 @@ threshold <-
       }
     }
 
-    #plot daily cases with and without adjustment
-    plot(x=seq(date), y=num, type="l", lty=1,col = 'red', xlab="days", ylab="daily cases", xaxt="n")
-    lines(x=seq(date), y=num_adj, lty=2, col= 'blue')
-    axis(side=1, at<-seq(date)[seq(1, length(seq(date)), 30)] , labels<-date[seq(1, length(date), 30)])
-    par(xpd=FALSE)
-    #legend("topleft", legend=c("observed", "adjusted"), lty=1:2,ncol=1)
-
     return( num_adj );
-
   }
+
+#' Prediction of Cumulative number of cases using data driven modified SIS model
+#' @return graph showing the training phase and prediction of cumulative number of cases
+#' @export
 
 sisd_cummulative<-
   function(population,
@@ -135,7 +132,7 @@ sisd_cummulative<-
         else if (strcmp(status, "Deceased"))
           act_d <- append(act_d, num)
       }
-    }
+  }
 
     #Calculating the Cumulative cases using the data
     get_data <- function(dt, c, r, d, N) {
@@ -367,7 +364,7 @@ sisd_cummulative<-
     )
 
     idx <- cur_day - best_last_n_days + 1
-    while (idx <= cur_day +  next_n_days ) {
+    while (idx <= cur_day+next_n_days ) {
       df[nrow(df) + 1, ] = list(odata$day[idx],
                                 act_odata$C[idx],
                                 "Observed",
@@ -386,14 +383,27 @@ sisd_cummulative<-
       idx1 <- idx1 + 1
     }
 
+#     idx <- cur_day + 1
+#     idx1 <- 1
+#     nerr <- 0
+#     while (idx <= cur_day + next_n_days) {
+#       df[nrow(df) + 1,] = list(odata$day[idx],
+#                                formatC(kk$C[idx1], digits = 2, format = "f"),
+#                                "Predicted",
+#                                as.Date(odata$date[idx], "%d-%b-%y"))
+#       idx <- idx + 1
+#       idx1 <- idx1 + 1
+#     }
+    
     idx <- cur_day + 1
     idx1 <- 1
     nerr <- 0
     while (idx <= cur_day + next_n_days) {
-      df[nrow(df) + 1,] = list(odata$day[idx],
+      df[nrow(df) + 1,] = list(cur_day+idx1,
                                formatC(kk$C[idx1], digits = 2, format = "f"),
                                "Predicted",
-                               as.Date(odata$date[idx], "%d-%b-%y"))
+                               as.Date(as.Date(start_date)+cur_day+idx1, "%d-%b-%y"))
+      
       idx <- idx + 1
       idx1 <- idx1 + 1
     }
@@ -438,6 +448,7 @@ sisd_cummulative<-
     stot = sum((observed_pred - mean(observed_pred))**2)
     sres = sum((observed_pred-kk$C)**2)
     rsq = 1 - sres/stot
+    prediction_mse <- format(round(sqrt(mean_sq), 2))
     print(paste("Root Mean Square error in predictions= ", format(round(sqrt(mean_sq), 2), nsmall = 2)))
 
     #mse of validation period
@@ -451,23 +462,32 @@ sisd_cummulative<-
     train_len = length(train$C)
     pred_train = train$C[(train_len-validation_period+1):train_len]
     val_mean_sq = mean((observed_val-pred_train)**2)
+    validation_mse <- format(round(sqrt(val_mean_sq), 2))
     print(paste("Root Mean Square error of validation period = ", format(round(sqrt(val_mean_sq), 2), nsmall = 2)))
 
+    if(adjusted){
+      opt_col <- '#cc33ff'
+      col <- '#0033cc'
+    }
+    else{
+      opt_col <- '#006600'
+      col <- '#ff3300'
+    }
+      
     p <-
       ggplot(df, aes(
         x = Date,
         y = Count,
         shape = Type,
         color = Type
-      )) + geom_point(size = 2) + scale_shape_manual(values = c(3, 16, 17))
+      )) + geom_point(size = 2) + scale_shape_manual(values = c(3, 16, 17))+scale_color_manual(values = c('#000000', opt_col, col ))
 
     p <-
       p + scale_x_date(date_breaks = "10 day") + labs(y = "Cumulative Number of Cases", x = "Date") +
       theme(axis.text.x = element_text(angle = 35, hjust = 1))
 
-    return(list(p,df,obs,pred))
+    return(list(p,df,obs,pred,prediction_mse,validation_mse))
   }
-
 
 plot_cumulative <- function(output_original, output_adjusted){
   df_org = output_original[2][[1]]
@@ -498,7 +518,8 @@ plot_cumulative <- function(output_original, output_adjusted){
   pred_adjusted = tail(pred_adjusted,pred_len)
   pred_adjusted_dates = tail(pred_adjusted_dates,pred_len)
   obs = tail(obs,pred_len)
-
+  optimaly_trained_period = pred_len-length(pred)
+  
   df = data.frame(
     Count = double(),
     Type = character(),
@@ -512,13 +533,6 @@ plot_cumulative <- function(output_original, output_adjusted){
                               pred_original_dates[idx])
     idx <- idx + 1
   }
-  idx <- 1
-  while (idx <= optimaly_trained_period) {
-    df[nrow(df) + 1,] = list(pred_original[idx],
-                             "Optimaly Trained Original",
-                             pred_original_dates[idx])
-    idx <- idx + 1
-  }
   idx<-1
   while (idx <= optimaly_trained_period) {
     df[nrow(df) + 1,] = list(pred_adjusted[idx],
@@ -526,19 +540,28 @@ plot_cumulative <- function(output_original, output_adjusted){
                              pred_original_dates[idx])
     idx <- idx + 1
   }
-  while (idx <= length(pred_original)) {
+  idx <- 1
+  while (idx <= optimaly_trained_period) {
     df[nrow(df) + 1,] = list(pred_original[idx],
-                             "Predicted Original",
+                             "Optimaly Trained Original",
                              pred_original_dates[idx])
     idx <- idx + 1
   }
-  idx <- optimaly_trained_period+1
+  
   while (idx <= length(pred_adjusted)) {
     df[nrow(df) + 1,] = list(pred_adjusted[idx],
                              "Predicted Adjusted",
                              pred_original_dates[idx])
     idx <- idx + 1
   }
+  idx <- optimaly_trained_period+1
+  while (idx <= length(pred_original)) {
+    df[nrow(df) + 1,] = list(pred_original[idx],
+                             "Predicted Original",
+                             pred_original_dates[idx])
+    idx <- idx + 1
+  }
+  
   df = transform(df, Count = as.numeric(Count))
   p <-
     ggplot(df, aes(
@@ -546,7 +569,7 @@ plot_cumulative <- function(output_original, output_adjusted){
       y = Count,
       shape = Type,
       color = Type
-    )) + geom_point(size = 2) + scale_shape_manual(values = c(3, 16, 16, 17,17)) + scale_color_manual(values = c('#006600', '#cc33ff', '#cc33ff', '#0033cc','#ff3300'))
+    )) + geom_point(size = 2) + scale_shape_manual(values = c(3, 16, 16, 17,17)) + scale_color_manual(values = c('#000000', '#cc33ff', '#006600', '#0033cc','#ff3300'))
   p <-
     p + scale_x_date(date_breaks = "10 day") + labs(y = "Cumulative Number of Cases", x = "Date") +
     theme(axis.text.x = element_text(angle = 35, hjust = 1))
@@ -559,4 +582,54 @@ plot_adjustment <- function(date, num, num_adj){
   axis(side=1, at<-seq(date)[seq(1, length(seq(date)), 30)] , labels<-date[seq(1, length(date), 30)])
   par(xpd=FALSE)
   legend("topleft", legend=c("observed", "adjusted"), lty=1:2,ncol=1)
+  
+
+  df = data.frame(
+    Count = double(),
+    Type = character(),
+    Date = as.Date(character()),
+    stringsAsFactors = FALSE
+  )
+  idx <- 1
+  while (idx <= length(num) ) {
+    df[nrow(df) + 1, ] = list(num[idx],
+                              "Observed",
+                              as.Date(date[idx], "%d-%b-%y"))
+    idx <- idx + 1
+  }
+
+  idx <- 1
+  while (idx <= length(num) ) {
+    df[nrow(df) + 1, ] = list(num_adj[idx],
+                              "adjusted",
+                              as.Date(date[idx], "%d-%b-%y"))
+    idx <- idx + 1
+  }
+  df = transform(df, Count = as.numeric(Count))
+  p <-
+    ggplot(df, aes(
+      x = Date,
+      y = Count,
+      group = Type
+    )) + geom_line(aes(color=Type))
+  p <-
+    p + scale_x_date(date_breaks = "60 day") + labs(y = "Daily Cases", x = "Date") +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1))
+  return (p)
+}
+
+comparing_results <- function(output_original,output_adjusted){
+  val_original <- output_original[6][[1]]
+  val_adjusted <- output_adjusted[6][[1]]
+  
+  if(val_adjusted < val_original)
+  {
+      print("Consider Adjustments")
+      return (output_adjusted[1])
+  }
+  else
+  {
+    print("No adjustement taken")
+    return (output_original[1])
+  }
 }
